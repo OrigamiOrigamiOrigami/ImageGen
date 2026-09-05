@@ -1,0 +1,50 @@
+name: imagegen
+description: AI Image Generator by Origami
+publish_to: 'none'
+version: 1.0.1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.2
+  path: ^1.9.0
+  path_provider: ^2.1.4
+  uuid: ^4.5.1
+  window_manager: ^0.4.3
+  file_picker: ^8.1.4
+  desktop_drop: ^0.5.0
+  intl: ^0.19.0
+  url_launcher: ^6.3.1
+  gal: ^2.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter_launcher_icons:
+  android: true
+  windows:
+    generate: true
+    image_path: icon.ico
+  image_path: icon.ico
+  adaptive_icon_background: "#12081C"
+  adaptive_icon_foreground: icon.ico
+
+flutter:
+  uses-material-design: true
+
+  # 默认 MiSans：见 assets/fonts/README.md
+  fonts:
+    - family: MiSans
+      fonts:
+        - asset: assets/fonts/MiSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/MiSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/MiSans-Semibold.ttf
+          weight: 600

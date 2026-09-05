@@ -1,0 +1,25 @@
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+pubspec.lock
+
+# 商业字体勿提交（本地保留即可）
+assets/fonts/*.ttf
+assets/fonts/*.otf
+
+*.iml
+.idea/
+.vscode/
+*.log
+*.obj
+*.exe
+
+windows/flutter/ephemeral/
+android/.gradle/
+android/local.properties
+ios/Pods/
+macos/Flutter/ephemeral/

@@ -1,0 +1,2 @@
+#define IDI_LAUNCHER_ICON 101
+IDI_LAUNCHER_ICON ICON "..\\..\\icon.ico"
