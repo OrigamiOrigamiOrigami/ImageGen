@@ -89,6 +89,8 @@ class _HomeScreenState extends State<HomeScreen> {
     String size,
     String imageSize,
     List<String> refImages,
+    String? quality,
+    String? background,
   ) async {
     final config = _config;
     if (config == null) return;
@@ -116,6 +118,8 @@ class _HomeScreenState extends State<HomeScreen> {
           model: model,
           size: size,
           imageSize: imageSize,
+          quality: quality,
+          background: background,
           n: 1,
           urls: refImages.isNotEmpty ? refImages : null,
         ),

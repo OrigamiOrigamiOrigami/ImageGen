@@ -7,21 +7,61 @@ import '../models/app_models.dart';
 
 enum ModelType { gptImage, nanoBanana, openai, gemini }
 
-const _gptImageModels = {'gpt-image-2', 'gpt-image-2-vip'};
+const _gptImagePrefix = 'gpt-image';
 const _nanoBananaPrefix = 'nano-banana';
 
 ModelType detectModelType(String model) {
-  if (_gptImageModels.contains(model)) return ModelType.gptImage;
+  if (model.startsWith(_gptImagePrefix)) return ModelType.gptImage;
   if (model.startsWith(_nanoBananaPrefix)) return ModelType.nanoBanana;
   return ModelType.openai;
 }
 
 bool isNanoBanana2Family(String model) {
+  if (model == 'nano-banana-2-lite') return false;
   return model == 'nano-banana-2' || model.startsWith('nano-banana-2-');
 }
 
-/// gpt-image-2-vip 需传像素值（默认 1K 档）
-const _gptVipPixels1K = {
+/// vip / 2.5 高清渠道：aspectRatio 传像素值（按 1K/2K/4K 档）
+bool gptUsesPixelSize(String model) {
+  return model == 'gpt-image-2-vip' ||
+      model == 'gpt-image-2.5-sunburst' ||
+      model == 'gpt-image-2.5-flare';
+}
+
+bool gptSupportsTransparentBackground(String model) {
+  return model == 'gpt-image-2-vip' ||
+      model == 'gpt-image-2.5-sunburst' ||
+      model == 'gpt-image-2.5-flare';
+}
+
+/// 按模型返回可选 quality；空列表表示不展示（也不强制传）。
+List<String> gptQualityOptions(String model) {
+  return switch (model) {
+    'gpt-image-2.5-sunburst' => const [
+        'auto',
+        'low',
+        'medium',
+        'high',
+        'xhigh',
+        'max',
+      ],
+    'gpt-image-2.5-flare' => const ['auto', 'low', 'medium', 'high'],
+    'gpt-image-2-vip' => const ['medium'],
+    'gpt-image-2' || 'gpt-image-2.5' => const ['auto'],
+    _ => const <String>[],
+  };
+}
+
+String gptDefaultQuality(String model) {
+  final opts = gptQualityOptions(model);
+  if (opts.isEmpty) return 'auto';
+  if (model == 'gpt-image-2-vip') return 'medium';
+  return opts.first;
+}
+
+/// 官方文档 1K/2K/4K 像素对照（gpt-image-2-vip / 2.5-flare / 2.5-sunburst）
+/// https://qmy27nhsd9.apifox.cn/452409160e0
+const _gptPixels1K = {
   'auto': '1024x1024',
   '1:1': '1024x1024',
   '16:9': '1280x720',
@@ -33,6 +73,50 @@ const _gptVipPixels1K = {
   '5:4': '1120x896',
   '4:5': '896x1120',
   '21:9': '1456x624',
+  '9:21': '624x1456',
+  '2:1': '1536x768',
+  '1:2': '768x1536',
+  // 文档未给 1K，回退到 2K 档
+  '1:3': '688x2048',
+  '3:1': '2048x688',
+};
+
+const _gptPixels2K = {
+  'auto': '2048x2048',
+  '1:1': '2048x2048',
+  '16:9': '2048x1152',
+  '9:16': '1152x2048',
+  '4:3': '2304x1728',
+  '3:4': '1728x2304',
+  '3:2': '2048x1360',
+  '2:3': '1360x2048',
+  '5:4': '2240x1792',
+  '4:5': '1792x2240',
+  '21:9': '2912x1248',
+  '9:21': '1248x2912',
+  '2:1': '3072x1536',
+  '1:2': '1536x3072',
+  '1:3': '688x2048',
+  '3:1': '2048x688',
+};
+
+const _gptPixels4K = {
+  'auto': '2880x2880',
+  '1:1': '2880x2880',
+  '16:9': '3840x2160',
+  '9:16': '2160x3840',
+  '4:3': '3264x2448',
+  '3:4': '2448x3264',
+  '3:2': '3504x2336',
+  '2:3': '2336x3504',
+  '5:4': '3200x2560',
+  '4:5': '2560x3200',
+  '21:9': '3840x1648',
+  '9:21': '1648x3840',
+  '2:1': '3840x1920',
+  '1:2': '1920x3840',
+  '1:3': '1280x3840',
+  '3:1': '3840x1280',
 };
 
 class ApiService {
@@ -121,8 +205,14 @@ class ApiService {
 
   String _resolveGptAspectRatio(GenerateParams params) {
     final ratio = params.size ?? '1:1';
-    if (params.model == 'gpt-image-2-vip') {
-      return _gptVipPixels1K[ratio] ?? _gptVipPixels1K['1:1']!;
+    if (gptUsesPixelSize(params.model)) {
+      final tier = params.imageSize ?? '1K';
+      final table = switch (tier) {
+        '2K' => _gptPixels2K,
+        '4K' => _gptPixels4K,
+        _ => _gptPixels1K,
+      };
+      return table[ratio] ?? table['1:1']!;
     }
     if (ratio == 'auto') return '1:1';
     return ratio;
@@ -147,6 +237,14 @@ class ApiService {
       }
     } else if (type == ModelType.gptImage) {
       body['aspectRatio'] = _resolveGptAspectRatio(params);
+      final quality = params.quality?.trim();
+      if (quality != null && quality.isNotEmpty) {
+        body['quality'] = quality;
+      }
+      final bg = params.background?.trim();
+      if (bg != null && bg.isNotEmpty) {
+        body['background'] = bg;
+      }
     }
     return body;
   }

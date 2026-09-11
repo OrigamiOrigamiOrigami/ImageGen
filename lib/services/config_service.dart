@@ -20,7 +20,6 @@ class ConfigService {
   String? _logPath;
   String? _supportDir;
   bool _saveToGallery = true;
-  String? _legacyElectronDir;
 
   Future<void> init() async {
     final support = await getApplicationSupportDirectory();
@@ -31,29 +30,7 @@ class ConfigService {
     _imagesDir = _defaultImagesDir;
     HistoryStore.instance.init(support.path);
 
-    // 兼容 Electron 版配置目录 (仅 Windows)
-    if (Platform.isWindows) {
-      final appData = Platform.environment['APPDATA'];
-      if (appData != null && appData.isNotEmpty) {
-        _legacyElectronDir = p.join(appData, 'imagegen-origami');
-      }
-    }
-
     await _ensureImagesDir(_imagesDir!);
-    await _migrateFromElectronIfNeeded();
-  }
-
-  Future<void> _migrateFromElectronIfNeeded() async {
-    if (_legacyElectronDir == null) return;
-    final legacyConfig = File(p.join(_legacyElectronDir!, 'config.json'));
-    final currentConfig = File(_configPath!);
-    if (legacyConfig.existsSync() && !currentConfig.existsSync()) {
-      await legacyConfig.copy(_configPath!);
-      final legacyImages = p.join(_legacyElectronDir!, 'images');
-      if (Directory(legacyImages).existsSync()) {
-        _imagesDir = legacyImages;
-      }
-    }
   }
 
   Future<void> _ensureImagesDir(String dir) async {

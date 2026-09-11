@@ -17,16 +17,23 @@ const _modelGroups = [
   (
     label: 'GPT Images',
     color: Color(0xFFF59E0B),
-    models: ['gpt-image-2', 'gpt-image-2-vip'],
+    models: [
+      'gpt-image-2.5',
+      'gpt-image-2.5-sunburst',
+      'gpt-image-2.5-flare',
+      'gpt-image-2',
+      'gpt-image-2-vip',
+    ],
   ),
   (
     label: 'Nano Banana',
     color: Color(0xFF10B981),
     models: [
-      'nano-banana',
       'nano-banana-fast',
+      'nano-banana-2-lite',
       'nano-banana-2',
       'nano-banana-2-cl',
+      'nano-banana-2-2k-cl',
       'nano-banana-2-4k-cl',
       'nano-banana-pro',
       'nano-banana-pro-cl',
@@ -37,31 +44,68 @@ const _modelGroups = [
 ];
 
 class _ParamsConfig {
-  const _ParamsConfig({required this.sizes, this.imageSizes});
+  const _ParamsConfig({
+    required this.sizes,
+    this.imageSizes,
+    this.qualities,
+    this.supportsTransparentBg = false,
+  });
   final List<String> sizes;
   final List<String>? imageSizes;
+  final List<String>? qualities;
+  final bool supportsTransparentBg;
 }
 
 const _nanoBanana2ExtraRatios = ['1:4', '4:1', '1:8', '8:1'];
+
+/// gpt-image-2 / 2.5：可传比例字符串
+const _gptBasicRatios = [
+  'auto',
+  '1:1',
+  '16:9',
+  '9:16',
+  '4:3',
+  '3:4',
+  '3:2',
+  '2:3',
+  '5:4',
+  '4:5',
+  '21:9',
+  '9:21',
+  '1:2',
+  '2:1',
+];
+
+/// vip / flare / sunburst：官方像素表覆盖的比例
+const _gptPixelRatios = [
+  'auto',
+  '1:1',
+  '16:9',
+  '9:16',
+  '4:3',
+  '3:4',
+  '3:2',
+  '2:3',
+  '5:4',
+  '4:5',
+  '21:9',
+  '9:21',
+  '1:2',
+  '2:1',
+  '1:3',
+  '3:1',
+];
 
 _ParamsConfig _paramsForModel(String model) {
   final type = detectModelType(model);
   switch (type) {
     case ModelType.gptImage:
-      return const _ParamsConfig(
-        sizes: [
-          'auto',
-          '1:1',
-          '16:9',
-          '9:16',
-          '4:3',
-          '3:4',
-          '3:2',
-          '2:3',
-          '5:4',
-          '4:5',
-          '21:9',
-        ],
+      final qualities = gptQualityOptions(model);
+      return _ParamsConfig(
+        sizes: gptUsesPixelSize(model) ? _gptPixelRatios : _gptBasicRatios,
+        imageSizes: gptUsesPixelSize(model) ? const ['1K', '2K', '4K'] : null,
+        qualities: qualities.isEmpty ? null : qualities,
+        supportsTransparentBg: gptSupportsTransparentBackground(model),
       );
     case ModelType.nanoBanana:
       final base = [
@@ -109,6 +153,13 @@ String _imageSizeForModel(String model, String preferred) {
   return imageSizes.first;
 }
 
+String _qualityForModel(String model, String preferred) {
+  final qualities = _paramsForModel(model).qualities;
+  if (qualities == null || qualities.isEmpty) return gptDefaultQuality(model);
+  if (qualities.contains(preferred)) return preferred;
+  return gptDefaultQuality(model);
+}
+
 const _formatColors = {
   ApiFormat.grsai: Color(0xFF10B981),
   ApiFormat.openai: Color(0xFF3B82F6),
@@ -127,6 +178,8 @@ typedef GenerateCallback = void Function(
   String size,
   String imageSize,
   List<String> refImages,
+  String? quality,
+  String? background,
 );
 
 class PromptBar extends StatefulWidget {
@@ -159,6 +212,8 @@ class _PromptBarState extends State<PromptBar> {
   late String _model;
   late String _size;
   var _imageSize = '1K';
+  var _quality = 'auto';
+  var _transparentBg = false;
   var _showOptions = false;
   var _showProfilePicker = false;
   final _refImages = <String>[];
@@ -173,6 +228,7 @@ class _PromptBarState extends State<PromptBar> {
     _model = widget.initialModel ?? 'nano-banana-2';
     if (!allModels.contains(_model)) _model = 'nano-banana-2';
     _size = _paramsForModel(_model).sizes.first;
+    _quality = gptDefaultQuality(_model);
     _promptFocusNode.onKeyEvent = _onPromptKey;
   }
 
@@ -207,6 +263,10 @@ class _PromptBarState extends State<PromptBar> {
         _model = first;
         _size = _sizeForModel(first, _size);
         _imageSize = _imageSizeForModel(first, _imageSize);
+        _quality = _qualityForModel(first, _quality);
+        if (!gptSupportsTransparentBackground(first)) {
+          _transparentBg = false;
+        }
       });
     }
   }
@@ -252,7 +312,11 @@ class _PromptBarState extends State<PromptBar> {
   String get _optionsSummary {
     final cfg = _paramsForModel(_model);
     final res = cfg.imageSizes != null ? ' · $_imageSize' : '';
-    return '$_model · $_size$res';
+    final q = cfg.qualities != null && cfg.qualities!.length > 1
+        ? ' · $_quality'
+        : '';
+    final bg = cfg.supportsTransparentBg && _transparentBg ? ' · 透明底' : '';
+    return '$_model · $_size$res$q$bg';
   }
 
   void _applyModel(String m, {VoidCallback? onChanged}) {
@@ -260,6 +324,10 @@ class _PromptBarState extends State<PromptBar> {
       _model = m;
       _size = _sizeForModel(m, _size);
       _imageSize = _imageSizeForModel(m, _imageSize);
+      _quality = _qualityForModel(m, _quality);
+      if (!gptSupportsTransparentBackground(m)) {
+        _transparentBg = false;
+      }
     });
     onChanged?.call();
   }
@@ -273,7 +341,19 @@ class _PromptBarState extends State<PromptBar> {
   void _submit() {
     final prompt = _promptController.text.trim();
     if (prompt.isEmpty) return;
-    widget.onGenerate(prompt, _model, _size, _imageSize, List.of(_refImages));
+    final cfg = _paramsForModel(_model);
+    final quality = cfg.qualities != null ? _quality : null;
+    final background =
+        cfg.supportsTransparentBg && _transparentBg ? 'transparent' : null;
+    widget.onGenerate(
+      prompt,
+      _model,
+      _size,
+      _imageSize,
+      List.of(_refImages),
+      quality,
+      background,
+    );
   }
 
   Future<void> _pickFiles() async {
@@ -452,6 +532,47 @@ class _PromptBarState extends State<PromptBar> {
                         onChanged?.call();
                       },
                     )),
+              ],
+            ),
+          ],
+          if (paramsCfg.qualities != null &&
+              paramsCfg.qualities!.length > 1) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text('质量',
+                    style: TextStyle(
+                        fontSize: 11, color: c(widget.theme.textMuted))),
+                ...paramsCfg.qualities!.map((s) => _chip(
+                      label: s,
+                      selected: _quality == s,
+                      onTap: () {
+                        setState(() => _quality = s);
+                        onChanged?.call();
+                      },
+                    )),
+              ],
+            ),
+          ],
+          if (paramsCfg.supportsTransparentBg) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text('背景',
+                    style: TextStyle(
+                        fontSize: 11, color: c(widget.theme.textMuted))),
+                _chip(
+                  label: '透明',
+                  selected: _transparentBg,
+                  onTap: () {
+                    setState(() => _transparentBg = !_transparentBg);
+                    onChanged?.call();
+                  },
+                ),
               ],
             ),
           ],

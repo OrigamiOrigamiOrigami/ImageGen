@@ -247,6 +247,8 @@ class GenerateParams {
     required this.model,
     this.size,
     this.imageSize,
+    this.quality,
+    this.background,
     this.n,
     this.urls,
   });
@@ -255,6 +257,8 @@ class GenerateParams {
   final String model;
   final String? size;
   final String? imageSize;
+  final String? quality;
+  final String? background;
   final int? n;
   final List<String>? urls;
 }

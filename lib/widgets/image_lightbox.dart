@@ -240,6 +240,7 @@ class _ImageLightboxState extends State<ImageLightbox> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: GestureDetector(
                 onTap: () {},
+                onDoubleTap: widget.onClose,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -301,6 +302,7 @@ class _ImageLightboxState extends State<ImageLightbox> {
             padding: const EdgeInsets.fromLTRB(52, 4, 52, 12),
             child: GestureDetector(
               onTap: () {},
+              onDoubleTap: widget.onClose,
               child: Column(
                 children: [
                   Expanded(
@@ -328,7 +330,7 @@ class _ImageLightboxState extends State<ImageLightbox> {
           right: 12,
           child: _LightboxIconBtn(
             icon: Icons.close,
-            tooltip: '关闭 (Esc)',
+            tooltip: '关闭 (Esc / 双击)',
             onPressed: widget.onClose,
           ),
         ),
