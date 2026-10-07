@@ -33,6 +33,7 @@ class ImageLightbox extends StatefulWidget {
 
 class _ImageLightboxState extends State<ImageLightbox> {
   Uint8List? _bytes;
+  bool _missing = false;
   bool _copied = false;
 
   @override
@@ -48,10 +49,17 @@ class _ImageLightboxState extends State<ImageLightbox> {
   }
 
   Future<void> _load() async {
-    setState(() => _bytes = null);
+    setState(() {
+      _bytes = null;
+      _missing = false;
+    });
     final item = widget.history[widget.index];
     final bytes = await ImageService.instance.readImageBytes(item.imagePath);
-    if (mounted) setState(() => _bytes = bytes);
+    if (!mounted) return;
+    setState(() {
+      _bytes = bytes;
+      _missing = bytes == null;
+    });
   }
 
   Future<void> _handleCopy(String imagePath) async {
@@ -205,6 +213,32 @@ class _ImageLightboxState extends State<ImageLightbox> {
           fit: BoxFit.contain,
           width: maxW,
           height: maxH,
+        ),
+      );
+    }
+    if (_missing) {
+      return SizedBox(
+        width: maxW < 384 ? maxW : 384,
+        height: maxH.clamp(200, 320),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.broken_image_outlined,
+                size: 48,
+                color: Colors.white.withValues(alpha: 0.55),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '文件已丢失，可关闭后删除此记录',
+                style: AppTypography.wenHei(
+                  fontSize: 14,
+                  color: Colors.white.withValues(alpha: 0.7),
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }

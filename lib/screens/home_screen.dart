@@ -128,9 +128,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final newItems = <HistoryItem>[];
       var savedToGallery = false;
+      // 生成前再清一次失效历史，避免外删后序号复用旧路径
+      final beforeSave = await ConfigService.instance.load();
+      if (mounted) setState(() => _config = beforeSave);
+      final reservedPaths = beforeSave.history.map((e) => e.imagePath);
       for (final result in results) {
         final saved = await ImageService.instance.saveImage(
           base64: result.base64,
+          reservedPaths: reservedPaths,
         );
         savedToGallery = savedToGallery || saved.savedToGallery;
         final imagePath = saved.path;

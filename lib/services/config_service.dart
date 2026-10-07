@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../models/app_models.dart';
 import '../platform/is_mobile.dart';
 import 'history_store.dart';
+import 'thumbnail_service.dart';
 
 class ConfigService {
   ConfigService._();
@@ -31,6 +32,18 @@ class ConfigService {
     HistoryStore.instance.init(support.path);
 
     await _ensureImagesDir(_imagesDir!);
+    _ensureLogFile();
+    log('INFO', 'ImageGen started');
+  }
+
+  void _ensureLogFile() {
+    try {
+      final file = File(_logPath!);
+      if (!file.existsSync()) {
+        file.parent.createSync(recursive: true);
+        file.createSync();
+      }
+    } catch (_) {}
   }
 
   Future<void> _ensureImagesDir(String dir) async {
@@ -69,10 +82,32 @@ class ConfigService {
       config.history = await HistoryStore.instance.load(
         maxItems: config.maxHistoryItems ?? HistoryStore.defaultMaxItems,
       );
+      config.history = await pruneMissingHistory(config.history);
       return config;
     } catch (_) {
       return _defaultConfig();
     }
+  }
+
+  /// 丢弃本地文件已不存在的历史项，并清理对应缩略图。
+  Future<List<HistoryItem>> pruneMissingHistory(List<HistoryItem> history) async {
+    if (history.isEmpty) return history;
+    final kept = <HistoryItem>[];
+    final removed = <HistoryItem>[];
+    for (final item in history) {
+      if (File(item.imagePath).existsSync()) {
+        kept.add(item);
+      } else {
+        removed.add(item);
+      }
+    }
+    if (removed.isEmpty) return history;
+    for (final item in removed) {
+      await ThumbnailService.instance.deleteFor(item.imagePath);
+    }
+    await HistoryStore.instance.save(kept);
+    log('INFO', 'Pruned ${removed.length} history items with missing files');
+    return kept;
   }
 
   /// 只写设置，不碰历史周文件。

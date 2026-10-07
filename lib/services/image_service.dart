@@ -19,21 +19,34 @@ class ImageService {
 
   Future<void> _saveLock = Future.value();
 
-  /// 下一张图的序号文件名：`1.png`、`2.png`…（取目录内已有数字名最大值 + 1）。
-  Future<String> nextSequentialFilename({String ext = 'png'}) async {
+  /// 下一张图的序号文件名：`1.png`、`2.png`…
+  /// 取「磁盘已有数字名」与「历史仍引用的数字名」的最大值 + 1，避免复用已删文件路径。
+  Future<String> nextSequentialFilename({
+    String ext = 'png',
+    Iterable<String>? reservedPaths,
+  }) async {
     final dir = Directory(ConfigService.instance.imagesDir);
     var next = 1;
+    void considerName(String basename) {
+      final m = _numericName.firstMatch(basename);
+      if (m == null) return;
+      final n = int.tryParse(m.group(1)!) ?? 0;
+      if (n >= next) next = n + 1;
+    }
+
     if (dir.existsSync()) {
       await for (final entity in dir.list()) {
         if (entity is! File) continue;
-        final m = _numericName.firstMatch(p.basename(entity.path));
-        if (m == null) continue;
-        final n = int.tryParse(m.group(1)!) ?? 0;
-        if (n >= next) next = n + 1;
+        considerName(p.basename(entity.path));
       }
     }
+    if (reservedPaths != null) {
+      for (final path in reservedPaths) {
+        considerName(p.basename(path));
+      }
+    }
+
     var name = '$next.$ext';
-    // 防撞：若同名已存在则继续递增
     while (File(p.join(dir.path, name)).existsSync()) {
       next++;
       name = '$next.$ext';
@@ -45,11 +58,14 @@ class ImageService {
   Future<({String path, bool savedToGallery})> saveImage({
     required String base64,
     String? filename,
+    Iterable<String>? reservedPaths,
   }) {
     // 串行化，避免并发生成时抢到同一序号
     final previous = _saveLock;
     late Future<({String path, bool savedToGallery})> result;
-    result = previous.then((_) => _saveImageUnlocked(base64, filename));
+    result = previous.then(
+      (_) => _saveImageUnlocked(base64, filename, reservedPaths),
+    );
     _saveLock = result.then((_) {}, onError: (_) {});
     return result;
   }
@@ -57,8 +73,10 @@ class ImageService {
   Future<({String path, bool savedToGallery})> _saveImageUnlocked(
     String base64,
     String? filename,
+    Iterable<String>? reservedPaths,
   ) async {
-    final name = filename ?? await nextSequentialFilename();
+    final name = filename ??
+        await nextSequentialFilename(reservedPaths: reservedPaths);
     final filePath = p.join(ConfigService.instance.imagesDir, name);
     final bytes = base64Decode(base64);
     await File(filePath).writeAsBytes(bytes);

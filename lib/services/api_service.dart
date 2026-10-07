@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import '../models/app_models.dart';
+import 'config_service.dart';
 
 enum ModelType { gptImage, nanoBanana, openai, gemini }
 
@@ -37,15 +38,16 @@ bool gptSupportsTransparentBackground(String model) {
 /// 按模型返回可选 quality；空列表表示不展示（也不强制传）。
 List<String> gptQualityOptions(String model) {
   return switch (model) {
+    // 文档：sunburst 不支持 auto
     'gpt-image-2.5-sunburst' => const [
-        'auto',
         'low',
         'medium',
         'high',
         'xhigh',
         'max',
       ],
-    'gpt-image-2.5-flare' => const ['auto', 'low', 'medium', 'high'],
+    // 文档：flare 不支持 auto
+    'gpt-image-2.5-flare' => const ['low', 'medium', 'high'],
     'gpt-image-2-vip' => const ['medium'],
     'gpt-image-2' || 'gpt-image-2.5' => const ['auto'],
     _ => const <String>[],
@@ -55,7 +57,8 @@ List<String> gptQualityOptions(String model) {
 String gptDefaultQuality(String model) {
   final opts = gptQualityOptions(model);
   if (opts.isEmpty) return 'auto';
-  if (model == 'gpt-image-2-vip') return 'medium';
+  // vip / flare / sunburst：默认 medium（文档 vip 仅支持 medium）
+  if (opts.contains('medium')) return 'medium';
   return opts.first;
 }
 
@@ -176,9 +179,8 @@ class ApiService {
       throw Exception('内容违规，请修改 Prompt 或参考图');
     }
     if (status == 'failed') {
-      throw Exception(
-        data['error'] as String? ?? '生成失败',
-      );
+      final raw = data['error'] as String? ?? '生成失败';
+      throw Exception(_humanizeApiError(raw));
     }
   }
 
@@ -237,7 +239,13 @@ class ApiService {
       }
     } else if (type == ModelType.gptImage) {
       body['aspectRatio'] = _resolveGptAspectRatio(params);
-      final quality = params.quality?.trim();
+      final allowed = gptQualityOptions(params.model);
+      var quality = params.quality?.trim();
+      if (quality == null ||
+          quality.isEmpty ||
+          (allowed.isNotEmpty && !allowed.contains(quality))) {
+        quality = allowed.isEmpty ? null : gptDefaultQuality(params.model);
+      }
       if (quality != null && quality.isNotEmpty) {
         body['quality'] = quality;
       }
@@ -247,6 +255,90 @@ class ApiService {
       }
     }
     return body;
+  }
+
+  /// 日志用：截断过长 prompt / base64，避免把整张参考图写进 app.log
+  Map<String, dynamic> _bodyForLog(Map<String, dynamic> body) {
+    final copy = Map<String, dynamic>.from(body);
+    final prompt = copy['prompt'];
+    if (prompt is String && prompt.length > 200) {
+      copy['prompt'] = '${prompt.substring(0, 200)}…(${prompt.length}字)';
+    }
+    final images = copy['images'];
+    if (images is List) {
+      copy['images'] = images.map((e) {
+        if (e is! String) return e;
+        if (e.startsWith('data:')) {
+          return 'data:…(${e.length} chars)';
+        }
+        if (e.length > 120) return '${e.substring(0, 120)}…';
+        return e;
+      }).toList();
+    }
+    return copy;
+  }
+
+  void _logRequest(String path, Map<String, dynamic> body) {
+    ConfigService.instance.log(
+      'INFO',
+      'API POST $path body=${jsonEncode(_bodyForLog(body))}',
+    );
+  }
+
+  void _logError(String context, Object error) {
+    ConfigService.instance.log('ERROR', '$context: $error');
+  }
+
+  Never _throwHttp(int statusCode, String text) {
+    final friendly = _friendlyHttpError(statusCode, text);
+    _logError('HTTP $statusCode', text.length > 800 ? '${text.substring(0, 800)}…' : text);
+    throw Exception(friendly);
+  }
+
+  /// 从 HTTP 正文里抽出可读错误（优先 JSON 的 error / message）。
+  String _friendlyHttpError(int statusCode, String text) {
+    final trimmed = text.trim();
+    if (trimmed.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(trimmed);
+        if (decoded is Map) {
+          final err = decoded['error'] ?? decoded['message'] ?? decoded['msg'];
+          if (err is String && err.trim().isNotEmpty) {
+            return _humanizeApiError(err.trim());
+          }
+          final status = decoded['status'];
+          if (status == 'violation') {
+            return '内容违规，请修改 Prompt 或参考图';
+          }
+        }
+      } catch (_) {}
+    }
+    if (statusCode == 401 || statusCode == 403) {
+      return '认证失败，请检查 API Key';
+    }
+    if (statusCode == 429) {
+      return '请求过于频繁，请稍后再试';
+    }
+    if (statusCode >= 500) {
+      return '服务端异常 ($statusCode)，请稍后再试';
+    }
+    if (trimmed.isEmpty) return '请求失败 ($statusCode)';
+    final short = trimmed.length > 80 ? '${trimmed.substring(0, 80)}…' : trimmed;
+    return '请求失败 ($statusCode)：$short';
+  }
+
+  String _humanizeApiError(String error) {
+    final lower = error.toLowerCase();
+    if (error.contains('模型正在修复') || lower.contains('under repair')) {
+      return '模型正在修复，请稍后再试或换其他模型';
+    }
+    if (error.contains('违规') || lower.contains('violation')) {
+      return '内容违规，请修改 Prompt 或参考图';
+    }
+    if (error.contains('余额') || error.contains('积分不足')) {
+      return error;
+    }
+    return error;
   }
 
   Map<String, String> _authHeaders(Profile profile) => {
@@ -289,22 +381,25 @@ class ApiService {
   ) async {
     final client = http.Client();
     try {
+      final path = '${_base(profile)}/v1/api/generate';
+      final body = _buildGrsaiBody(params, replyType: 'stream');
+      _logRequest(path, body);
       final request = http.Request(
         'POST',
-        Uri.parse('${_base(profile)}/v1/api/generate'),
+        Uri.parse(path),
       )
         ..headers.addAll({
           ..._authHeaders(profile),
           'Accept': 'text/event-stream, application/json',
         })
-        ..body = jsonEncode(_buildGrsaiBody(params, replyType: 'stream'));
+        ..body = jsonEncode(body);
 
       final response = await client
           .send(request)
           .timeout(const Duration(minutes: 5));
       if (response.statusCode != 200) {
         final text = await response.stream.bytesToString();
-        throw Exception('请求失败 ${response.statusCode}: $text');
+        _throwHttp(response.statusCode, text);
       }
 
       final ct = response.headers['content-type'] ?? '';
@@ -346,11 +441,18 @@ class ApiService {
       }
       throw Exception('流结束但未收到结果');
     } on SocketException catch (e) {
+      _logError('连接失败', e.message);
       throw Exception('无法连接服务器，请检查网络与 Base URL: ${e.message}');
     } on HttpException catch (e) {
+      _logError('HTTP异常', e.message);
       throw Exception('网络请求异常: ${e.message}');
     } catch (e) {
-      if (e is Exception) rethrow;
+      if (e is Exception) {
+        final s = e.toString();
+        if (!s.contains('请求失败')) _logError('生成失败', e);
+        rethrow;
+      }
+      _logError('生成失败', e);
       throw Exception('网络请求失败: $e（请检查 Base URL 与 API Key）');
     } finally {
       client.close();
@@ -364,16 +466,19 @@ class ApiService {
   ) async {
     final base = _base(profile);
     final headers = _authHeaders(profile);
+    final path = '$base/v1/api/generate';
+    final body = _buildGrsaiBody(params, replyType: 'async');
+    _logRequest(path, body);
     final res = await http
         .post(
-          Uri.parse('$base/v1/api/generate'),
+          Uri.parse(path),
           headers: headers,
-          body: jsonEncode(_buildGrsaiBody(params, replyType: 'async')),
+          body: jsonEncode(body),
         )
         .timeout(const Duration(seconds: 60));
 
     if (res.statusCode != 200) {
-      throw Exception('请求失败 ${res.statusCode}: ${res.body}');
+      _throwHttp(res.statusCode, res.body);
     }
 
     final start = jsonDecode(res.body) as Map<String, dynamic>;
@@ -403,7 +508,7 @@ class ApiService {
           .timeout(const Duration(seconds: 30));
 
       if (poll.statusCode != 200) {
-        throw Exception('查询失败 ${poll.statusCode}: ${poll.body}');
+        _throwHttp(poll.statusCode, poll.body);
       }
 
       final data = jsonDecode(poll.body) as Map<String, dynamic>;

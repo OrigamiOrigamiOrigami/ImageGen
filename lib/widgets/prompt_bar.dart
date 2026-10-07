@@ -608,79 +608,123 @@ class _PromptBarState extends State<PromptBar> {
     );
   }
 
+  void _reorderRefs(int oldIndex, int newIndex) {
+    setState(() {
+      final img = _refImages.removeAt(oldIndex);
+      final preview = _refPreviews.removeAt(oldIndex);
+      _refImages.insert(newIndex, img);
+      _refPreviews.insert(newIndex, preview);
+    });
+  }
+
   Widget _refPreviewRow() {
     const thumbSize = 56.0;
     const radius = 10.0;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: List.generate(_refPreviews.length, (i) {
-          return SizedBox(
-            width: thumbSize,
-            height: thumbSize,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                GestureDetector(
-                  onTap: () => _showRefLightbox(_refPreviews[i]),
-                  child: Container(
-                    width: thumbSize,
-                    height: thumbSize,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(radius),
-                      border: Border.all(
-                        color: c(widget.theme.border),
-                      ),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(radius - 1),
-                      child: Image.memory(
-                        _decodeDataUrl(_refPreviews[i]),
-                        width: thumbSize,
-                        height: thumbSize,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
+      child: SizedBox(
+        height: thumbSize,
+        child: ReorderableListView.builder(
+          scrollDirection: Axis.horizontal,
+          buildDefaultDragHandles: false,
+          proxyDecorator: (child, index, animation) {
+            return AnimatedBuilder(
+              animation: animation,
+              builder: (context, _) {
+                final t = Curves.easeInOut.transform(animation.value);
+                return Material(
+                  color: Colors.transparent,
+                  elevation: 2 + 4 * t,
+                  borderRadius: BorderRadius.circular(radius),
+                  child: child,
+                );
+              },
+            );
+          },
+          onReorderItem: _reorderRefs,
+          itemCount: _refPreviews.length,
+          itemBuilder: (context, i) {
+            return ReorderableDragStartListener(
+              key: ValueKey(_refPreviews[i]),
+              index: i,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  right: i == _refPreviews.length - 1 ? 0 : 8,
                 ),
-                Positioned(
-                  top: 4,
-                  right: 4,
-                  child: GestureDetector(
-                    onTap: () => _removeRef(i),
-                    child: Container(
-                      width: 20,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.62),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.85),
-                          width: 1.2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.35),
-                            blurRadius: 4,
-                            offset: const Offset(0, 1),
+                child: SizedBox(
+                  width: thumbSize,
+                  height: thumbSize,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Tooltip(
+                        message: '拖拽调整顺序',
+                        child: GestureDetector(
+                          onTap: () => _showRefLightbox(_refPreviews[i]),
+                          child: MouseRegion(
+                            cursor: SystemMouseCursors.grab,
+                            child: Container(
+                              width: thumbSize,
+                              height: thumbSize,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(radius),
+                                border: Border.all(
+                                  color: c(widget.theme.border),
+                                ),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(radius - 1),
+                                child: Image.memory(
+                                  _decodeDataUrl(_refPreviews[i]),
+                                  width: thumbSize,
+                                  height: thumbSize,
+                                  fit: BoxFit.cover,
+                                  gaplessPlayback: true,
+                                ),
+                              ),
+                            ),
                           ),
-                        ],
+                        ),
                       ),
-                      child: const Icon(
-                        Icons.close,
-                        size: 12,
-                        color: Colors.white,
+                      Positioned(
+                        top: 4,
+                        right: 4,
+                        child: GestureDetector(
+                          onTap: () => _removeRef(i),
+                          child: Container(
+                            width: 20,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.62),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.85),
+                                width: 1.2,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.35),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.close,
+                              size: 12,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-          );
-        }),
+              ),
+            );
+          },
+        ),
       ),
     );
   }

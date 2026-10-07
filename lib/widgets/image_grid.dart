@@ -198,7 +198,7 @@ class _TaskCard extends StatelessWidget {
                 if (task.status == TaskStatus.error)
                   Text(
                     task.error ?? '生成失败',
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style:
                         const TextStyle(fontSize: 11, color: Colors.redAccent),
@@ -239,6 +239,7 @@ class _ImageCard extends StatefulWidget {
 
 class _ImageCardState extends State<_ImageCard> {
   String? _displayPath;
+  bool _missing = false;
   bool _confirmDelete = false;
   int _loadGen = 0;
 
@@ -253,6 +254,7 @@ class _ImageCardState extends State<_ImageCard> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.item.imagePath != widget.item.imagePath) {
       _displayPath = null;
+      _missing = false;
       _resolveThumb();
     }
   }
@@ -260,9 +262,59 @@ class _ImageCardState extends State<_ImageCard> {
   Future<void> _resolveThumb() async {
     final gen = ++_loadGen;
     final path = widget.item.imagePath;
+    if (!File(path).existsSync()) {
+      if (!mounted || gen != _loadGen) return;
+      setState(() {
+        _missing = true;
+        _displayPath = null;
+      });
+      return;
+    }
     final thumb = await ThumbnailService.instance.getThumbnailPath(path);
     if (!mounted || gen != _loadGen) return;
-    setState(() => _displayPath = thumb ?? path);
+    setState(() {
+      _missing = false;
+      _displayPath = thumb ?? path;
+    });
+  }
+
+  Widget _missingPlaceholder() {
+    return ColoredBox(
+      color: c(widget.theme.surface),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.broken_image_outlined,
+                size: 28,
+                color: c(widget.theme.textMuted).withValues(alpha: 0.7),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '文件已丢失',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: c(widget.theme.textMuted),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '可删除此记录',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: c(widget.theme.textMuted).withValues(alpha: 0.7),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -274,19 +326,21 @@ class _ImageCardState extends State<_ImageCard> {
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: widget.onExpand,
+        onTap: _missing ? null : widget.onExpand,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: Stack(
             fit: StackFit.expand,
             children: [
-              if (_displayPath != null)
+              if (_missing)
+                _missingPlaceholder()
+              else if (_displayPath != null)
                 Image.file(
                   File(_displayPath!),
                   fit: BoxFit.cover,
                   cacheWidth: cacheW,
                   filterQuality: FilterQuality.low,
-                  errorBuilder: (_, __, ___) => _Shimmer(theme: widget.theme),
+                  errorBuilder: (_, __, ___) => _missingPlaceholder(),
                 )
               else
                 _Shimmer(theme: widget.theme),
@@ -294,7 +348,7 @@ class _ImageCardState extends State<_ImageCard> {
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    onTap: widget.onExpand,
+                    onTap: _missing ? null : widget.onExpand,
                     hoverColor: Colors.black26,
                     child: Align(
                       alignment: Alignment.topRight,
@@ -322,7 +376,7 @@ class _ImageCardState extends State<_ImageCard> {
                                 ),
                               ),
                             if (_confirmDelete) const SizedBox(width: 4),
-                            if (!isMobile) ...[
+                            if (!isMobile && !_missing) ...[
                               _ActionBtn(
                                 icon: Icons.folder_open_outlined,
                                 onTap: () => ImageService.instance
