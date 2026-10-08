@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（不含 v，如 1.0.2）'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $ver = "${{ inputs.version }}".Trim().TrimStart('v', 'V')
+          } else {
+            $ver = "${{ github.ref_name }}".TrimStart('v', 'V')
+          }
+          if ($ver -notmatch '^\d+\.\d+\.\d+(\+\d+)?$') {
+            throw "Invalid version '$ver' (expect x.y.z)"
+          }
+          $name = ($ver -split '\+')[0]
+          "version=$name" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Release version: $name"
+
+      - name: Sync pubspec version
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.ver.outputs.version }}"
+          $raw = Get-Content pubspec.yaml -Raw
+          $updated = [regex]::Replace($raw, '(?m)^version:\s*\S+', "version: $ver")
+          [System.IO.File]::WriteAllText((Resolve-Path pubspec.yaml), $updated)
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build single-file exe
+        shell: pwsh
+        run: .\tool\build_single.ps1
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ImageGen-${{ steps.ver.outputs.version }}
+          path: build/ImageGen-${{ steps.ver.outputs.version }}.exe
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: ImageGen ${{ steps.ver.outputs.version }}
+          files: build/ImageGen-${{ steps.ver.outputs.version }}.exe
+          generate_release_notes: true
+          body: |
+            ## 下载
+            Windows 单文件：`ImageGen-${{ steps.ver.outputs.version }}.exe`
+
+            ## 说明
+            - 绿色运行，首次启动会解压到本机缓存目录
+            - 配置与历史仍在 `%APPDATA%\com.origami.imagegen\`
+            - 详见仓库 [说明.md](https://github.com/${{ github.repository }}/blob/main/说明.md)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

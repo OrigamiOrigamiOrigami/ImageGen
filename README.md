@@ -46,9 +46,11 @@ flutter build windows --release          # 标准 Release 文件夹
 .\tool\build_portable.ps1                # 绿色版（文件夹 + zip）
 .\tool\build_single.ps1                  # 单文件 exe（推荐便携）
 .\tool\build_installer.ps1               # Setup 安装包（需 Inno Setup）
+.\tool\tag_release.ps1                   # 推送 v* 标签 → GitHub Actions 自动发 Release
 ```
 
-标准 Release 输出：`build\windows\x64\runner\Release\`
+标准 Release 输出：`build\windows\x64\runner\Release\`  
+自动发版说明见 [说明.md](说明.md#github-自动发布)。
 
 ## 配置与数据目录
 
