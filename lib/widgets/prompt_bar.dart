@@ -192,6 +192,7 @@ class PromptBar extends StatefulWidget {
     required this.activeProfileId,
     required this.onSwitchProfile,
     this.initialModel,
+    this.promptController,
   });
 
   final AppTheme theme;
@@ -201,13 +202,16 @@ class PromptBar extends StatefulWidget {
   final String? activeProfileId;
   final ValueChanged<String> onSwitchProfile;
   final String? initialModel;
+  /// 外部注入时由父组件持有，便于助手面板填入提示词。
+  final TextEditingController? promptController;
 
   @override
   State<PromptBar> createState() => _PromptBarState();
 }
 
 class _PromptBarState extends State<PromptBar> {
-  final _promptController = TextEditingController();
+  late final TextEditingController _promptController;
+  var _ownsPromptController = false;
   final _promptFocusNode = FocusNode();
   late String _model;
   late String _size;
@@ -223,6 +227,12 @@ class _PromptBarState extends State<PromptBar> {
   @override
   void initState() {
     super.initState();
+    if (widget.promptController != null) {
+      _promptController = widget.promptController!;
+    } else {
+      _promptController = TextEditingController();
+      _ownsPromptController = true;
+    }
     final allModels =
         _modelGroups.expand((g) => g.models).toList(growable: false);
     _model = widget.initialModel ?? 'nano-banana-2';
@@ -274,7 +284,7 @@ class _PromptBarState extends State<PromptBar> {
   @override
   void dispose() {
     _promptFocusNode.dispose();
-    _promptController.dispose();
+    if (_ownsPromptController) _promptController.dispose();
     super.dispose();
   }
 

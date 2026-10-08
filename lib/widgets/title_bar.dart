@@ -12,10 +12,14 @@ class TitleBar extends StatelessWidget {
     super.key,
     required this.theme,
     required this.onSettings,
+    this.onChat,
+    this.chatOpen = false,
   });
 
   final AppTheme theme;
   final VoidCallback onSettings;
+  final VoidCallback? onChat;
+  final bool chatOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -49,6 +53,15 @@ class TitleBar extends StatelessWidget {
             ),
           ],
           const Spacer(),
+          if (onChat != null)
+            _WinBtn(
+              icon: chatOpen
+                  ? Icons.chat_bubble
+                  : Icons.chat_bubble_outline,
+              tooltip: '提示词助手',
+              onTap: onChat!,
+              theme: theme,
+            ),
           _WinBtn(
             icon: Icons.settings_outlined,
             tooltip: '系统设置',

@@ -10,6 +10,7 @@ import '../services/task_queue.dart';
 import '../theme/app_typography.dart';
 import '../theme/ui_scale.dart';
 import '../themes/app_themes.dart';
+import '../widgets/chat_panel.dart';
 import '../widgets/image_grid.dart';
 import '../widgets/image_lightbox.dart';
 import '../widgets/profile_switcher.dart';
@@ -35,10 +36,27 @@ class _HomeScreenState extends State<HomeScreen> {
   AppTheme _theme = getTheme(ThemeId.darkPurple);
   bool _showSettings = false;
   bool _showSystem = false;
+  bool _showChat = false;
   int? _lightboxIndex;
   String? _error;
   late TaskQueue _taskQueue;
   List<GenTask> _tasks = [];
+  final _promptController = TextEditingController();
+
+  @override
+  void dispose() {
+    _promptController.dispose();
+    super.dispose();
+  }
+
+  void _applyChatPrompt(String text) {
+    _promptController.text = text;
+    _promptController.selection =
+        TextSelection.collapsed(offset: text.length);
+    if (isMobile) {
+      setState(() => _showChat = false);
+    }
+  }
 
   @override
   void initState() {
@@ -249,6 +267,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 }
               },
+              chatApiKey: config.chatApiKey ?? '',
+              onChatApiKeyChange: (v) {
+                final c = _config;
+                if (c != null) _persist(c..chatApiKey = v);
+              },
+              chatModel: config.chatModel ?? kChatDefaultModel,
+              onChatModelChange: (v) {
+                final c = _config;
+                if (c != null) _persist(c..chatModel = v);
+              },
             ),
           ),
         ),
@@ -256,6 +284,10 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     setState(() => _showSystem = true);
+  }
+
+  void _toggleChat() {
+    setState(() => _showChat = !_showChat);
   }
 
   void _openApiSettings(BuildContext context) {
@@ -331,6 +363,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 TitleBar(
                   theme: _theme,
                   onSettings: () => _openSystemSettings(context),
+                  onChat: _toggleChat,
+                  chatOpen: _showChat,
                 ),
                 Container(
                   padding: EdgeInsets.symmetric(
@@ -397,27 +431,77 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 Expanded(
-                  child: ImageGrid(
-                    key: const ValueKey('image-grid'),
-                    theme: _theme,
-                    history: config.history,
-                    tasks: _tasks,
-                    onDelete: _handleDeleteHistory,
-                    onPreview: (i) => setState(() => _lightboxIndex = i),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Expanded(
+                              child: ImageGrid(
+                                key: const ValueKey('image-grid'),
+                                theme: _theme,
+                                history: config.history,
+                                tasks: _tasks,
+                                onDelete: _handleDeleteHistory,
+                                onPreview: (i) =>
+                                    setState(() => _lightboxIndex = i),
+                              ),
+                            ),
+                            PromptBar(
+                              theme: _theme,
+                              onGenerate: _handleGenerate,
+                              hasRunning: _taskQueue.hasRunning,
+                              profiles: config.profiles,
+                              activeProfileId: config.activeProfileId,
+                              onSwitchProfile: (id) =>
+                                  _persist(config..activeProfileId = id),
+                              initialModel: config.lastModel,
+                              promptController: _promptController,
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (!isMobile && _showChat)
+                        SizedBox(
+                          width: 380,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              border: Border(
+                                left: BorderSide(color: c(_theme.border)),
+                              ),
+                            ),
+                            child: ChatPanel(
+                              theme: _theme,
+                              apiKey: config.chatApiKey ?? '',
+                              model: config.chatModel ?? kChatDefaultModel,
+                              onClose: () => setState(() => _showChat = false),
+                              onApplyPrompt: _applyChatPrompt,
+                              onOpenSettings: () {
+                                setState(() => _showChat = false);
+                                _openSystemSettings(context);
+                              },
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                ),
-                PromptBar(
-                  theme: _theme,
-                  onGenerate: _handleGenerate,
-                  hasRunning: _taskQueue.hasRunning,
-                  profiles: config.profiles,
-                  activeProfileId: config.activeProfileId,
-                  onSwitchProfile: (id) =>
-                      _persist(config..activeProfileId = id),
-                  initialModel: config.lastModel,
                 ),
               ],
             ),
+            if (isMobile && _showChat)
+              Positioned.fill(
+                child: ChatPanel(
+                  theme: _theme,
+                  apiKey: config.chatApiKey ?? '',
+                  model: config.chatModel ?? kChatDefaultModel,
+                  onClose: () => setState(() => _showChat = false),
+                  onApplyPrompt: _applyChatPrompt,
+                  onOpenSettings: () {
+                    setState(() => _showChat = false);
+                    _openSystemSettings(context);
+                  },
+                ),
+              ),
             if (!isMobile && _showSettings)
               Positioned.fill(
                 child: SettingsModal(
@@ -474,6 +558,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     );
                     setState(() {});
                   },
+                  chatApiKey: config.chatApiKey ?? '',
+                  onChatApiKeyChange: (v) => _persist(config..chatApiKey = v),
+                  chatModel: config.chatModel ?? kChatDefaultModel,
+                  onChatModelChange: (v) => _persist(config..chatModel = v),
                 ),
               ),
             if (_lightboxIndex != null)

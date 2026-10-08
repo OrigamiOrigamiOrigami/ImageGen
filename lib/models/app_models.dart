@@ -175,6 +175,18 @@ class HistoryItem {
       };
 }
 
+/// 提示词助手（TokenPlan / Intern discovery）固定站点。
+const kChatBaseUrl = 'https://discovery-api.intern-ai.org.cn/v1';
+/// TokenPlan 可用多模态模型（文本+图像，OpenAI Chat）。
+const kChatDefaultModel = 'qwen3.8-27b';
+const kChatModelChoices = [
+  'qwen3.8-27b',
+  'Agents-A1',
+  'deepseek-v4-flash-vision',
+  'intern-s2',
+  'kimi-k2.6',
+];
+
 class AppConfig {
   AppConfig({
     required this.profiles,
@@ -187,6 +199,8 @@ class AppConfig {
     this.maxConcurrent,
     this.maxHistoryItems,
     this.uiScale,
+    this.chatApiKey,
+    this.chatModel,
   });
 
   List<Profile> profiles;
@@ -202,6 +216,10 @@ class AppConfig {
   int? maxHistoryItems;
   /// 界面缩放：auto / 100 / 115 / 125 / 150
   String? uiScale;
+  /// 提示词助手 API Key（站点固定为 discovery-api）
+  String? chatApiKey;
+  /// 提示词助手模型 ID
+  String? chatModel;
 
   factory AppConfig.fromJson(Map<String, dynamic> json) => AppConfig(
         profiles: (json['profiles'] as List<dynamic>?)
@@ -220,6 +238,8 @@ class AppConfig {
         maxConcurrent: (json['maxConcurrent'] as num?)?.toInt(),
         maxHistoryItems: (json['maxHistoryItems'] as num?)?.toInt(),
         uiScale: json['uiScale'] as String?,
+        chatApiKey: json['chatApiKey'] as String?,
+        chatModel: json['chatModel'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -238,6 +258,8 @@ class AppConfig {
         if (maxConcurrent != null) 'maxConcurrent': maxConcurrent,
         if (maxHistoryItems != null) 'maxHistoryItems': maxHistoryItems,
         if (uiScale != null && uiScale!.isNotEmpty) 'uiScale': uiScale,
+        if (chatApiKey != null) 'chatApiKey': chatApiKey,
+        if (chatModel != null && chatModel!.isNotEmpty) 'chatModel': chatModel,
       };
 }
 

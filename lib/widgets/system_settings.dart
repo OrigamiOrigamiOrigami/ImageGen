@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../models/app_models.dart';
 import '../platform/is_mobile.dart';
+import '../services/chat_service.dart';
 import '../services/config_service.dart';
 import '../services/history_store.dart';
 import '../services/image_service.dart';
@@ -28,6 +29,10 @@ class SystemSettings extends StatefulWidget {
     required this.saveToGallery,
     required this.onSaveToGalleryChange,
     required this.onResetDir,
+    required this.chatApiKey,
+    required this.onChatApiKeyChange,
+    required this.chatModel,
+    required this.onChatModelChange,
     this.fullPage = false,
   });
 
@@ -46,6 +51,10 @@ class SystemSettings extends StatefulWidget {
   final ValueChanged<int> onMaxHistoryItemsChange;
   final UiScalePreset uiScale;
   final ValueChanged<UiScalePreset> onUiScaleChange;
+  final String chatApiKey;
+  final ValueChanged<String> onChatApiKeyChange;
+  final String chatModel;
+  final ValueChanged<String> onChatModelChange;
 
   @override
   State<SystemSettings> createState() => _SystemSettingsState();
@@ -55,6 +64,9 @@ class _SystemSettingsState extends State<SystemSettings> {
   late ThemeId _themeId;
   late int _maxConcurrent;
   late int _maxHistoryItems;
+  late TextEditingController _chatKeyController;
+  late String _chatModel;
+  var _obscureChatKey = true;
 
   @override
   void initState() {
@@ -62,6 +74,8 @@ class _SystemSettingsState extends State<SystemSettings> {
     _themeId = widget.currentTheme;
     _maxConcurrent = widget.maxConcurrent;
     _maxHistoryItems = widget.maxHistoryItems;
+    _chatKeyController = TextEditingController(text: widget.chatApiKey);
+    _chatModel = widget.chatModel.isEmpty ? kChatDefaultModel : widget.chatModel;
   }
 
   @override
@@ -76,6 +90,20 @@ class _SystemSettingsState extends State<SystemSettings> {
     if (widget.maxHistoryItems != oldWidget.maxHistoryItems) {
       _maxHistoryItems = widget.maxHistoryItems;
     }
+    if (widget.chatApiKey != oldWidget.chatApiKey &&
+        widget.chatApiKey != _chatKeyController.text) {
+      _chatKeyController.text = widget.chatApiKey;
+    }
+    if (widget.chatModel != oldWidget.chatModel &&
+        widget.chatModel.isNotEmpty) {
+      _chatModel = widget.chatModel;
+    }
+  }
+
+  @override
+  void dispose() {
+    _chatKeyController.dispose();
+    super.dispose();
   }
 
   AppTheme get _displayTheme => getTheme(_themeId);
@@ -402,6 +430,88 @@ class _SystemSettingsState extends State<SystemSettings> {
                             fontSize: 11,
                             color: c(_displayTheme.textMuted),
                           ),
+                        ),
+                        const SizedBox(height: 24),
+                        _sectionTitle('提示词助手'),
+                        const SizedBox(height: 6),
+                        Text(
+                          '站点固定：$kChatBaseUrl\n用于多模态对话写提示词，Key 自行填写',
+                          style: AppTypography.app(
+                            fontSize: 11,
+                            color: c(_displayTheme.textMuted),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _chatKeyController,
+                          obscureText: _obscureChatKey,
+                          style: AppTypography.app(
+                            fontSize: 13,
+                            color: c(_displayTheme.text),
+                          ),
+                          decoration: InputDecoration(
+                            labelText: 'API Key',
+                            labelStyle: AppTypography.app(
+                              fontSize: 12,
+                              color: c(_displayTheme.textMuted),
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscureChatKey
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined,
+                                size: 18,
+                              ),
+                              onPressed: () => setState(
+                                () => _obscureChatKey = !_obscureChatKey,
+                              ),
+                            ),
+                          ),
+                          onChanged: widget.onChatApiKeyChange,
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: kChatModelChoices.map((m) {
+                            final selected = _chatModel == m;
+                            return InkWell(
+                              onTap: () {
+                                setState(() => _chatModel = m);
+                                widget.onChatModelChange(m);
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: selected
+                                        ? c(activeTheme.accent)
+                                        : c(activeTheme.border),
+                                  ),
+                                  color: selected
+                                      ? c(activeTheme.accent)
+                                          .withValues(alpha: 0.15)
+                                      : null,
+                                ),
+                                child: Text(
+                                  m,
+                                  style: AppTypography.app(
+                                    fontSize: 11,
+                                    color: selected
+                                        ? c(activeTheme.accentGlow)
+                                        : c(activeTheme.textMuted),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
                         ),
                         const SizedBox(height: 24),
                         _sectionTitle('历史列表上限'),
