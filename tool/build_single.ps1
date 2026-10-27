@@ -15,18 +15,23 @@ function Get-AppVersion {
 function Find-VsDevCmd {
     $candidates = @(
         "D:\VisualStudio\Product\VC\Auxiliary\Build\vcvars64.bat",
+        "${env:ProgramFiles}\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat",
         "${env:ProgramFiles}\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat",
         "${env:ProgramFiles}\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat",
-        "${env:ProgramFiles}\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+        "${env:ProgramFiles}\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat",
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
     )
     foreach ($p in $candidates) {
         if (Test-Path $p) { return $p }
     }
     $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
     if (Test-Path $vswhere) {
-        $install = & $vswhere -latest -property installationPath 2>$null
+        $install = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null
+        if (-not $install) {
+            $install = & $vswhere -latest -property installationPath 2>$null
+        }
         if ($install) {
-            $vcvars = Join-Path $install "VC\Auxiliary\Build\vcvars64.bat"
+            $vcvars = Join-Path $install.Trim() "VC\Auxiliary\Build\vcvars64.bat"
             if (Test-Path $vcvars) { return $vcvars }
         }
     }
@@ -48,8 +53,18 @@ if (-not (Test-Path $iconIco)) {
 }
 
 Write-Host ">> Sync Windows app icon ..."
+$appIcon = Join-Path $root "windows\runner\resources\app_icon.ico"
+Copy-Item -Force $iconIco $appIcon
+# CI 上通常没有 Android SDK；android:true 会导致 flutter_launcher_icons 失败。
+# 先直接同步 Windows 图标，再尝试完整图标生成（失败不阻断打包）。
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
 dart run flutter_launcher_icons
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$iconExit = $LASTEXITCODE
+$ErrorActionPreference = $prevEap
+if ($iconExit -ne 0) {
+    Write-Host "flutter_launcher_icons exit=$iconExit (ignored; Windows icon already copied)"
+}
 
 Write-Host ">> flutter build windows --release ..."
 flutter build windows --release

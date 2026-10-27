@@ -61,9 +61,22 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # windows-latest 无 Android SDK；避免 flutter_launcher_icons 因 android:true 失败
+      - name: CI icon config (Windows only)
+        shell: pwsh
+        run: |
+          $raw = Get-Content pubspec.yaml -Raw
+          $raw = $raw -replace '(?m)^(\s*)android:\s*true\s*$', '$1android: false'
+          [System.IO.File]::WriteAllText((Resolve-Path pubspec.yaml), $raw)
+
       - name: Build single-file exe
         shell: pwsh
-        run: .\tool\build_single.ps1
+        run: |
+          Write-Host "VS candidates / vswhere:"
+          & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -format json 2>$null | Out-Host
+          .\tool\build_single.ps1
+        env:
+          CI: "true"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
