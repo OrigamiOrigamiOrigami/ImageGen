@@ -69,12 +69,26 @@ jobs:
           $raw = $raw -replace '(?m)^(\s*)android:\s*true\s*$', '$1android: false'
           [System.IO.File]::WriteAllText((Resolve-Path pubspec.yaml), $raw)
 
-      - name: Build single-file exe
+      - name: Diagnose toolchain
         shell: pwsh
         run: |
-          Write-Host "VS candidates / vswhere:"
-          & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -format json 2>$null | Out-Host
-          .\tool\build_single.ps1
+          flutter doctor -v
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (Test-Path $vswhere) {
+            & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          } else {
+            Write-Host "vswhere missing"
+          }
+
+      - name: Flutter build windows
+        shell: pwsh
+        run: |
+          Copy-Item -Force icon.ico windows\runner\resources\app_icon.ico
+          flutter build windows --release
+
+      - name: Build single-file exe
+        shell: pwsh
+        run: .\tool\build_single.ps1
         env:
           CI: "true"
 
