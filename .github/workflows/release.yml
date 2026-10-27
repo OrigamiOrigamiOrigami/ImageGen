@@ -20,7 +20,8 @@ concurrency:
 
 jobs:
   windows:
-    runs-on: windows-latest
+    # windows-latest 已带 VS2026，旧版 Flutter 无法正确生成 Windows 工程；固定 2022。
+    runs-on: windows-2022
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -61,7 +62,7 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # windows-latest 无 Android SDK；避免 flutter_launcher_icons 因 android:true 失败
+      # CI 无 Android SDK；避免 flutter_launcher_icons 因 android:true 失败
       - name: CI icon config (Windows only)
         shell: pwsh
         run: |
@@ -69,26 +70,22 @@ jobs:
           $raw = $raw -replace '(?m)^(\s*)android:\s*true\s*$', '$1android: false'
           [System.IO.File]::WriteAllText((Resolve-Path pubspec.yaml), $raw)
 
-      - name: Diagnose toolchain
+      - name: Clean CMake cache
         shell: pwsh
         run: |
-          flutter doctor -v
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          if (Test-Path $vswhere) {
-            & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-          } else {
-            Write-Host "vswhere missing"
+          $buildDir = "build\windows\x64"
+          if (Test-Path "$buildDir\CMakeCache.txt") {
+            Remove-Item "$buildDir\CMakeCache.txt" -Force
           }
-
-      - name: Flutter build windows
-        shell: pwsh
-        run: |
-          Copy-Item -Force icon.ico windows\runner\resources\app_icon.ico
-          flutter build windows --release
+          if (Test-Path "$buildDir\CMakeFiles") {
+            Remove-Item "$buildDir\CMakeFiles" -Recurse -Force
+          }
 
       - name: Build single-file exe
         shell: pwsh
-        run: .\tool\build_single.ps1
+        run: |
+          flutter doctor -v
+          .\tool\build_single.ps1
         env:
           CI: "true"
 
