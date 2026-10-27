@@ -455,6 +455,17 @@ class _HomeScreenState extends State<HomeScreen> {
                               activeProfileId: config.activeProfileId,
                               onSwitchProfile: (id) =>
                                   _persist(config..activeProfileId = id),
+                              promptPresets: config.promptPresets,
+                              activePromptPresetId:
+                                  config.activePromptPresetId,
+                              onPromptPresetsChange: (list) => _persist(
+                                    config
+                                      ..promptPresets =
+                                          normalizePromptPresets(list),
+                                  ),
+                              onActivePromptPresetChange: (id) => _persist(
+                                    config..activePromptPresetId = id,
+                                  ),
                               initialModel: config.lastModel,
                               promptController: _promptController,
                             ),

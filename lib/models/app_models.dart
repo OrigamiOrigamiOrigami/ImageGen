@@ -187,6 +187,62 @@ const kChatModelChoices = [
   'kimi-k2.6',
 ];
 
+/// 可复用的长提示词模板（对话框只填补充部分）。
+class PromptPreset {
+  PromptPreset({
+    required this.id,
+    required this.name,
+    this.text = '',
+  });
+
+  String id;
+  String name;
+  String text;
+
+  factory PromptPreset.fromJson(Map<String, dynamic> json) => PromptPreset(
+        id: json['id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        text: json['text'] as String? ?? '',
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'text': text,
+      };
+
+  PromptPreset copyWith({String? id, String? name, String? text}) =>
+      PromptPreset(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        text: text ?? this.text,
+      );
+}
+
+/// 固定 5 个预设槽位；缺省或损坏时补齐。
+List<PromptPreset> normalizePromptPresets(List<PromptPreset>? raw) {
+  const defaults = [
+    ('preset-1', '预设1'),
+    ('preset-2', '预设2'),
+    ('preset-3', '预设3'),
+    ('preset-4', '预设4'),
+    ('preset-5', '预设5'),
+  ];
+  final out = <PromptPreset>[];
+  for (var i = 0; i < 5; i++) {
+    final src = (raw != null && i < raw.length) ? raw[i] : null;
+    final fallback = defaults[i];
+    out.add(
+      PromptPreset(
+        id: (src?.id.isNotEmpty ?? false) ? src!.id : fallback.$1,
+        name: (src?.name.isNotEmpty ?? false) ? src!.name : fallback.$2,
+        text: src?.text ?? '',
+      ),
+    );
+  }
+  return out;
+}
+
 class AppConfig {
   AppConfig({
     required this.profiles,
@@ -201,7 +257,9 @@ class AppConfig {
     this.uiScale,
     this.chatApiKey,
     this.chatModel,
-  });
+    List<PromptPreset>? promptPresets,
+    this.activePromptPresetId,
+  }) : promptPresets = normalizePromptPresets(promptPresets);
 
   List<Profile> profiles;
   String? activeProfileId;
@@ -220,6 +278,10 @@ class AppConfig {
   String? chatApiKey;
   /// 提示词助手模型 ID
   String? chatModel;
+  /// 5 个可自定义提示词预设
+  List<PromptPreset> promptPresets;
+  /// 当前选中的预设 id；null 表示不叠加预设
+  String? activePromptPresetId;
 
   factory AppConfig.fromJson(Map<String, dynamic> json) => AppConfig(
         profiles: (json['profiles'] as List<dynamic>?)
@@ -240,6 +302,10 @@ class AppConfig {
         uiScale: json['uiScale'] as String?,
         chatApiKey: json['chatApiKey'] as String?,
         chatModel: json['chatModel'] as String?,
+        promptPresets: (json['promptPresets'] as List<dynamic>?)
+            ?.map((e) => PromptPreset.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        activePromptPresetId: json['activePromptPresetId'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -260,6 +326,9 @@ class AppConfig {
         if (uiScale != null && uiScale!.isNotEmpty) 'uiScale': uiScale,
         if (chatApiKey != null) 'chatApiKey': chatApiKey,
         if (chatModel != null && chatModel!.isNotEmpty) 'chatModel': chatModel,
+        'promptPresets': promptPresets.map((e) => e.toJson()).toList(),
+        if (activePromptPresetId != null)
+          'activePromptPresetId': activePromptPresetId,
       };
 }
 

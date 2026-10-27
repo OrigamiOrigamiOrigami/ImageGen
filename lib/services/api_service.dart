@@ -19,7 +19,9 @@ ModelType detectModelType(String model) {
 
 bool isNanoBanana2Family(String model) {
   if (model == 'nano-banana-2-lite') return false;
-  return model == 'nano-banana-2' || model.startsWith('nano-banana-2-');
+  return model == 'nano-banana-2' ||
+      model == 'nano-banana-2.1' ||
+      model.startsWith('nano-banana-2-');
 }
 
 /// vip / 2.5 高清渠道：aspectRatio 传像素值（按 1K/2K/4K 档）

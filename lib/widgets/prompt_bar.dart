@@ -32,6 +32,7 @@ const _modelGroups = [
       'nano-banana-fast',
       'nano-banana-2-lite',
       'nano-banana-2',
+      'nano-banana-2.1',
       'nano-banana-2-cl',
       'nano-banana-2-2k-cl',
       'nano-banana-2-4k-cl',
@@ -191,6 +192,10 @@ class PromptBar extends StatefulWidget {
     required this.profiles,
     required this.activeProfileId,
     required this.onSwitchProfile,
+    required this.promptPresets,
+    required this.activePromptPresetId,
+    required this.onPromptPresetsChange,
+    required this.onActivePromptPresetChange,
     this.initialModel,
     this.promptController,
   });
@@ -201,6 +206,10 @@ class PromptBar extends StatefulWidget {
   final List<Profile> profiles;
   final String? activeProfileId;
   final ValueChanged<String> onSwitchProfile;
+  final List<PromptPreset> promptPresets;
+  final String? activePromptPresetId;
+  final ValueChanged<List<PromptPreset>> onPromptPresetsChange;
+  final ValueChanged<String?> onActivePromptPresetChange;
   final String? initialModel;
   /// 外部注入时由父组件持有，便于助手面板填入提示词。
   final TextEditingController? promptController;
@@ -348,9 +357,34 @@ class _PromptBarState extends State<PromptBar> {
     Navigator.pop(sheetContext);
   }
 
+  PromptPreset? get _activePreset {
+    final id = widget.activePromptPresetId;
+    if (id == null) return null;
+    for (final p in widget.promptPresets) {
+      if (p.id == id) return p;
+    }
+    return null;
+  }
+
+  String get _promptHint {
+    if (_dragging) return '松开以添加图片...';
+    final hasPreset = (_activePreset?.text.trim().isNotEmpty ?? false);
+    if (hasPreset) {
+      return isDesktop
+          ? '补充提示词…（已叠加「${_activePreset!.name}」，Enter 发送）'
+          : '补充提示词…（已叠加「${_activePreset!.name}」）';
+    }
+    if (isDesktop) {
+      return '描述你想生成的图片... (Enter 发送，Shift+Enter 换行，可粘贴/拖入图片)';
+    }
+    return '描述你想生成的图片...';
+  }
+
   void _submit() {
-    final prompt = _promptController.text.trim();
-    if (prompt.isEmpty) return;
+    final base = _activePreset?.text.trim() ?? '';
+    final extra = _promptController.text.trim();
+    if (base.isEmpty && extra.isEmpty) return;
+    final prompt = [base, extra].where((s) => s.isNotEmpty).join('\n');
     final cfg = _paramsForModel(_model);
     final quality = cfg.qualities != null ? _quality : null;
     final background =
@@ -363,6 +397,179 @@ class _PromptBarState extends State<PromptBar> {
       List.of(_refImages),
       quality,
       background,
+    );
+  }
+
+  void _selectPreset(PromptPreset preset) {
+    final nextId =
+        widget.activePromptPresetId == preset.id ? null : preset.id;
+    widget.onActivePromptPresetChange(nextId);
+  }
+
+  Future<void> _editPreset(PromptPreset preset) async {
+    final nameCtrl = TextEditingController(text: preset.name);
+    final textCtrl = TextEditingController(text: preset.text);
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: c(widget.theme.surface),
+        title: Text(
+          '编辑提示词预设',
+          style: TextStyle(color: c(widget.theme.text), fontSize: 16),
+        ),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                style: TextStyle(color: c(widget.theme.text), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: '名称',
+                  labelStyle: TextStyle(color: c(widget.theme.textMuted)),
+                  hintText: '如：角色固定设定',
+                  hintStyle: TextStyle(color: c(widget.theme.textMuted)),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: c(widget.theme.border)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: c(widget.theme.accent)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: textCtrl,
+                minLines: 6,
+                maxLines: 12,
+                style: TextStyle(color: c(widget.theme.text), fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: '固定提示词',
+                  alignLabelWithHint: true,
+                  labelStyle: TextStyle(color: c(widget.theme.textMuted)),
+                  hintText: '每次生成都会自动拼在补充提示词前面',
+                  hintStyle: TextStyle(color: c(widget.theme.textMuted)),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: c(widget.theme.border)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: c(widget.theme.accent)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('取消', style: TextStyle(color: c(widget.theme.textMuted))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('保存', style: TextStyle(color: c(widget.theme.accentGlow))),
+          ),
+        ],
+      ),
+    );
+    final name = nameCtrl.text.trim();
+    final text = textCtrl.text;
+    nameCtrl.dispose();
+    textCtrl.dispose();
+    if (saved != true || !mounted) return;
+    final next = widget.promptPresets
+        .map(
+          (p) => p.id == preset.id
+              ? p.copyWith(
+                  name: name.isEmpty ? p.name : name,
+                  text: text,
+                )
+              : p,
+        )
+        .toList(growable: false);
+    widget.onPromptPresetsChange(normalizePromptPresets(next));
+    if (widget.activePromptPresetId != preset.id) {
+      widget.onActivePromptPresetChange(preset.id);
+    }
+  }
+
+  Widget _presetRow() {
+    final presets = normalizePromptPresets(widget.promptPresets);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            '预设',
+            style: TextStyle(fontSize: 11, color: c(widget.theme.textMuted)),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                for (final p in presets)
+                  Tooltip(
+                    message: p.text.trim().isEmpty
+                        ? '长按编辑「${p.name}」'
+                        : '点击选用；长按编辑\n${p.text.trim()}',
+                    waitDuration: const Duration(milliseconds: 400),
+                    child: InkWell(
+                      onTap: () => _selectPreset(p),
+                      onLongPress: () => _editPreset(p),
+                      borderRadius: BorderRadius.circular(4),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: widget.activePromptPresetId == p.id
+                                ? c(widget.theme.accent)
+                                : c(widget.theme.border),
+                          ),
+                          borderRadius: BorderRadius.circular(4),
+                          color: widget.activePromptPresetId == p.id
+                              ? c(widget.theme.accent).withValues(alpha: 0.2)
+                              : null,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              p.name,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: widget.activePromptPresetId == p.id
+                                    ? c(widget.theme.accentGlow)
+                                    : c(widget.theme.textMuted),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            GestureDetector(
+                              onTap: () => _editPreset(p),
+                              child: Icon(
+                                Icons.edit_outlined,
+                                size: 12,
+                                color: c(widget.theme.textMuted),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -435,6 +642,7 @@ class _PromptBarState extends State<PromptBar> {
             children: [
               if (!compact && _showOptions) _optionsPanel(paramsCfg),
               if (_refPreviews.isNotEmpty) _refPreviewRow(),
+              _presetRow(),
               compact ? _mobileInputRow(paramsCfg) : _inputRow(paramsCfg),
             ],
           ),
@@ -955,7 +1163,7 @@ class _PromptBarState extends State<PromptBar> {
                   ),
                   style: TextStyle(color: c(widget.theme.text), fontSize: fs),
                   decoration: InputDecoration(
-                    hintText: '描述你想生成的图片...',
+                    hintText: _promptHint,
                     hintStyle:
                         TextStyle(color: c(widget.theme.textMuted), fontSize: fs),
                     border: InputBorder.none,
@@ -1064,11 +1272,7 @@ class _PromptBarState extends State<PromptBar> {
                 textInputAction: TextInputAction.newline,
                 style: TextStyle(color: c(widget.theme.text), fontSize: fs),
                 decoration: InputDecoration(
-                  hintText: _dragging
-                      ? '松开以添加图片...'
-                      : isDesktop
-                          ? '描述你想生成的图片... (Enter 发送，Shift+Enter 换行，可粘贴/拖入图片)'
-                          : '描述你想生成的图片...',
+                  hintText: _promptHint,
                   hintStyle:
                       TextStyle(color: c(widget.theme.textMuted), fontSize: fs),
                   border: InputBorder.none,
