@@ -53,6 +53,8 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
+          # 与本机已验证可打包的版本对齐
+          flutter-version: "3.44.0"
           channel: stable
           cache: true
 
@@ -81,11 +83,31 @@ jobs:
             Remove-Item "$buildDir\CMakeFiles" -Recurse -Force
           }
 
-      - name: Build single-file exe
+      - name: Flutter build windows
         shell: pwsh
         run: |
+          Copy-Item -Force icon.ico windows\runner\resources\app_icon.ico
           flutter doctor -v
-          .\tool\build_single.ps1
+          flutter build windows --release *>&1 | Tee-Object -FilePath flutter-build.log
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content flutter-build.log -Tail 80 | ForEach-Object {
+              Write-Host $_
+              Write-Host "::error::$_"
+            }
+            exit 1
+          }
+
+      - name: Pack single-file exe
+        shell: pwsh
+        run: |
+          .\tool\build_single.ps1 *>&1 | Tee-Object -FilePath pack.log
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content pack.log -Tail 80 | ForEach-Object {
+              Write-Host $_
+              Write-Host "::error::$_"
+            }
+            exit 1
+          }
         env:
           CI: "true"
 
